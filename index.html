@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bézier Pen Tool</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            background: #f0f0f0;
+        }
+
+        canvas {
+            display: block;
+            background: #fff;
+            border: 1px solid #ccc;
+            margin: 10px auto;
+        }
+
+        .controls {
+            text-align: center;
+            margin: 10px;
+        }
+
+        button {
+            margin: 0 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="controls">
+        <button onclick="undo()">Undo</button>
+        <button onclick="redo()">Redo</button>
+        <button onclick="clearPaths()">Clear</button>
+        <button onclick="toggleClose()">Toggle Close</button>
+        <button onclick="saveAsSVG()">Save as SVG</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = window.innerWidth - 100;
+        canvas.height = window.innerHeight - 100;
+
+        let paths = []; // completed paths
+        let points = []; // current open path
+        let currentPathClosed = false;
+        let undoStack = [];
+        let redoStack = [];
+        let dragging = null;
+        let isCtrlPressed = false;
+        let selectedPathIndex = null; // Track selected path
+
+        function saveState() {
+            undoStack.push(JSON.stringify({ paths, points, currentPathClosed, selectedPathIndex }));
+            redoStack.length = 0;
+        }
+
+        function undo() {
+            if (undoStack.length > 0) {
+                redoStack.push(JSON.stringify({ paths, points, currentPathClosed, selectedPathIndex }));
+                const state = JSON.parse(undoStack.pop());
+                paths = state.paths;
+                points = state.points;
+                currentPathClosed = state.currentPathClosed;
+                selectedPathIndex = state.selectedPathIndex;
+                draw();
+            }
+        }
+
+        function redo() {
+            if (redoStack.length > 0) {
+                undoStack.push(JSON.stringify({ paths, points, currentPathClosed, selectedPathIndex }));
+                const state = JSON.parse(redoStack.pop());
+                paths = state.paths;
+                points = state.points;
+                currentPathClosed = state.currentPathClosed;
+                selectedPathIndex = state.selectedPathIndex;
+                draw();
+            }
+        }
+
+        function clearPaths() {
+            paths.length = 0;
+            points.length = 0;
+            console.log("called");
+            draw();
+        }
+
+        function toggleClose() {
+            console.log("sdfdf")
+            currentPathClosed = !currentPathClosed;
+            draw();
+        }
+
+        canvas.addEventListener("mousedown", e => {
+            const pos = getMousePos(e);
+            const hit = findHandle(pos);
+            if (hit) {
+                dragging = hit;
+                selectedPathIndex = paths.indexOf(hit.path); // Select the path
+                if (hit.key === "anchor" && hit.point === points[0] && points.length > 1) {
+                    // Close and save path
+                    saveState();
+                    paths.push({ points: [...points], closed: true });
+                    points = [];
+                    currentPathClosed = false;
+                    dragging = null;
+                }
+            } else {
+                saveState();
+                const newPoint = {
+                    anchor: pos,
+                    cp1: { x: pos.x - 50, y: pos.y },
+                    cp2: { x: pos.x + 50, y: pos.y }
+                };
+                if (points.length > 0 && isCtrlPressed) {
+                    const last = points[points.length - 1];
+                    const dx = last.anchor.x - last.cp2.x;
+                    const dy = last.anchor.y - last.cp2.y;
+                    newPoint.cp1 = { x: newPoint.anchor.x + dx, y: newPoint.anchor.y + dy };
+                }
+                points.push(newPoint);
+                dragging = { key: "cp2", point: newPoint };
+            }
+            draw();
+        });
+
+        canvas.addEventListener("mousemove", e => {
+            if (!dragging) return;
+            const pos = getMousePos(e);
+            const pt = dragging.point;
+            const key = dragging.key;
+
+            if (key === "anchor") {
+                const dx = pos.x - pt.anchor.x;
+                const dy = pos.y - pt.anchor.y;
+                pt.anchor = pos;
+                if (!isCtrlPressed) {
+                    pt.cp1.x += dx; pt.cp1.y += dy;
+                    pt.cp2.x += dx; pt.cp2.y += dy;
+                }
+            } else {
+                pt[key] = pos;
+                if (!isCtrlPressed && (key === "cp1" || key === "cp2")) {
+                    const dx = pt.anchor.x - pos.x;
+                    const dy = pt.anchor.y - pos.y;
+                    const mirror = key === "cp1" ? "cp2" : "cp1";
+                    pt[mirror] = { x: pt.anchor.x + dx, y: pt.anchor.y + dy };
+                }
+            }
+
+            draw();
+        });
+
+        canvas.addEventListener("mouseup", e => {
+            if (dragging) saveState();
+            dragging = null;
+        });
+
+        document.addEventListener("keydown", e => {
+            if (e.key === "Control") isCtrlPressed = true;
+        });
+        document.addEventListener("keyup", e => {
+            if (e.key === "Control") isCtrlPressed = false;
+        });
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+
+        function findHandle(pos) {
+            for (const path of paths) {
+                for (const pt of path.points) {
+                    for (const key of ["anchor", "cp1", "cp2"]) {
+                        const p = pt[key];
+                        if (Math.hypot(p.x - pos.x, p.y - pos.y) < 8) {
+                            return { point: pt, key, path };
+                        }
+                    }
+                }
+            }
+
+            for (const pt of points) {
+                for (const key of ["anchor", "cp1", "cp2"]) {
+                    const p = pt[key];
+                    if (Math.hypot(p.x - pos.x, p.y - pos.y) < 8) {
+                        return { point: pt, key };
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            function drawPath(pathObj) {
+                const path = pathObj.points;
+                const closed = pathObj.closed;
+
+                ctx.beginPath();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#000";
+                for (let i = 1; i < path.length; i++) {
+                    const p0 = path[i - 1];
+                    const p1 = path[i];
+                    ctx.moveTo(p0.anchor.x, p0.anchor.y);
+                    ctx.bezierCurveTo(p0.cp2.x, p0.cp2.y, p1.cp1.x, p1.cp1.y, p1.anchor.x, p1.anchor.y);
+                }
+
+                if (closed && path.length > 1) {
+                    const p0 = path[path.length - 1];
+                    const p1 = path[0];
+                    ctx.moveTo(p0.anchor.x, p0.anchor.y);
+                    ctx.bezierCurveTo(p0.cp2.x, p0.cp2.y, p1.cp1.x, p1.cp1.y, p1.anchor.x, p1.anchor.y);
+                }
+
+                ctx.stroke();
+
+                // Handle lines
+                ctx.strokeStyle = "#aaa";
+                ctx.setLineDash([5, 3]);
+                for (const pt of path) {
+                    ctx.beginPath();
+                    ctx.moveTo(pt.anchor.x, pt.anchor.y);
+                    ctx.lineTo(pt.cp1.x, pt.cp1.y);
+                    ctx.moveTo(pt.anchor.x, pt.anchor.y);
+                    ctx.lineTo(pt.cp2.x, pt.cp2.y);
+                    ctx.stroke();
+                }
+                ctx.setLineDash([]);
+
+                for (const pt of path) {
+                    drawPoint(pt.anchor, "black");
+                    drawPoint(pt.cp1, "blue");
+                    drawPoint(pt.cp2, "red");
+                }
+            }
+
+            for (const path of paths) {
+                drawPath(path);
+            }
+
+            if (points.length > 0) {
+                drawPath({ points, closed: currentPathClosed });
+            }
+        }
+
+        function drawPoint(p, color) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function saveAsSVG() {
+            const svgNS = "http://www.w3.org/2000/svg";
+            const width = canvas.width;
+            const height = canvas.height;
+            let svg = `<svg xmlns="${svgNS}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n`;
+
+            const all = [...paths];
+            if (points.length > 1) all.push({ points, closed: currentPathClosed });
+
+            for (const { points: path, closed } of all) {
+                if (path.length < 2) continue;
+                let d = "";
+                for (let i = 1; i < path.length; i++) {
+                    const p0 = path[i - 1];
+                    const p1 = path[i];
+                    d += `M ${p0.anchor.x} ${p0.anchor.y} C ${p0.cp2.x} ${p0.cp2.y}, ${p1.cp1.x} ${p1.cp1.y}, ${p1.anchor.x} ${p1.anchor.y} `;
+                }
+
+                if (closed && path.length > 1) {
+                    const p0 = path[path.length - 1];
+                    const p1 = path[0];
+                    d += `M ${p0.anchor.x} ${p0.anchor.y} C ${p0.cp2.x} ${p0.cp2.y}, ${p1.cp1.x} ${p1.cp1.y}, ${p1.anchor.x} ${p1.anchor.y} Z`;
+                }
+
+                svg += `<path d="${d}" stroke="black" fill="none" stroke-width="2"/>\n`;
+            }
+
+            svg += "</svg>";
+
+            const blob = new Blob([svg], { type: "image/svg+xml" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "drawing.svg";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        draw();
+    </script>
+
+</body>
+
+</html>
