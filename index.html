@@ -39,6 +39,7 @@
         <button onclick="clearPaths()">Clear</button>
         <button onclick="toggleClose()">Toggle Close</button>
         <button onclick="saveAsSVG()">Save as SVG</button>
+        <input type="file" id="imageLoader" accept="image/*" style="position:absolute; z-index: 1;">
     </div>
 
     <canvas id="canvas"></canvas>
@@ -46,6 +47,63 @@
     <script>
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
+        // --------------
+        let img = new Image();
+        let imageLoaded = false;
+        let isPanning = false;
+        let startPan = { x: 0, y: 0 };
+
+        const imageLoader = document.getElementById('imageLoader');
+        imageLoader.addEventListener('change', handleImage, false);
+
+        function handleImage(e) {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                img.onload = function () {
+                    imageLoaded = true;
+                    resetTransform();
+                    draw();
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(e.target.files[0]);
+        }
+        //--------------
+
+        let scale = 1, translateX = 0, translateY = 0;
+
+        function resetTransform() {
+            const aspectRatio = img.width / img.height;
+            if (canvas.width / canvas.height > aspectRatio) {
+                scale = canvas.height / img.height;
+            } else {
+                scale = canvas.width / img.width;
+            }
+            translateX = (canvas.width - img.width * scale) / 2;
+            translateY = (canvas.height - img.height * scale) / 2;
+        }
+
+        function canvasToImageCoords({x, y}) {
+            console.log(translateX, x, translateY, scale)
+            return {
+                x: (x - translateX) / scale,
+                y: (y - translateY) / scale
+            };
+        }
+
+        function drawImage() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (!imageLoaded) return;
+
+            ctx.save();
+            ctx.translate(translateX, translateY);
+            ctx.scale(scale, scale);
+            ctx.drawImage(img, 0, 0);
+
+            ctx.restore();
+        }
+
+        //--------------
 
         canvas.width = window.innerWidth - 100;
         canvas.height = window.innerHeight - 100;
@@ -101,8 +159,9 @@
             draw();
         }
 
-        canvas.addEventListener("mousedown", e => {
-            const pos = getMousePos(e);
+        canvas.addEventListener("pointerdown", e => {
+            const pos = canvasToImageCoords(getMousePos(e));
+            console.log(pos)
             const hit = findHandle(pos);
             if (hit) {
                 dragging = hit;
@@ -116,6 +175,7 @@
                     dragging = null;
                 }
             } else {
+                console.log("mouse down")
                 saveState();
                 const newPoint = {
                     anchor: pos,
@@ -128,43 +188,82 @@
                     const dy = last.anchor.y - last.cp2.y;
                     newPoint.cp1 = { x: newPoint.anchor.x + dx, y: newPoint.anchor.y + dy };
                 }
+
                 points.push(newPoint);
                 dragging = { key: "cp2", point: newPoint };
+                console.log(points)
+            }
+
+            if (!dragging) {
+                isPanning = true;
+                startPan = { x: e.offsetX, y: e.offsetY };
             }
             draw();
         });
 
-        canvas.addEventListener("mousemove", e => {
-            if (!dragging) return;
-            const pos = getMousePos(e);
-            const pt = dragging.point;
-            const key = dragging.key;
+        canvas.addEventListener("pointermove", e => {
+            if (dragging) {
+                const pos = canvasToImageCoords(getMousePos(e));
+                const pt = dragging.point;
+                const key = dragging.key;
 
-            if (key === "anchor") {
-                const dx = pos.x - pt.anchor.x;
-                const dy = pos.y - pt.anchor.y;
-                pt.anchor = pos;
-                if (!isCtrlPressed) {
-                    pt.cp1.x += dx; pt.cp1.y += dy;
-                    pt.cp2.x += dx; pt.cp2.y += dy;
+                if (key === "anchor") {
+                    const dx = pos.x - pt.anchor.x;
+                    const dy = pos.y - pt.anchor.y;
+                    pt.anchor = pos;
+                    if (!isCtrlPressed) {
+                        pt.cp1.x += dx; pt.cp1.y += dy;
+                        pt.cp2.x += dx; pt.cp2.y += dy;
+                    }
+                } else {
+                    pt[key] = pos;
+                    if (!isCtrlPressed && (key === "cp1" || key === "cp2")) {
+                        const dx = pt.anchor.x - pos.x;
+                        const dy = pt.anchor.y - pos.y;
+                        const mirror = key === "cp1" ? "cp2" : "cp1";
+                        pt[mirror] = { x: pt.anchor.x + dx, y: pt.anchor.y + dy };
+                    }
                 }
-            } else {
-                pt[key] = pos;
-                if (!isCtrlPressed && (key === "cp1" || key === "cp2")) {
-                    const dx = pt.anchor.x - pos.x;
-                    const dy = pt.anchor.y - pos.y;
-                    const mirror = key === "cp1" ? "cp2" : "cp1";
-                    pt[mirror] = { x: pt.anchor.x + dx, y: pt.anchor.y + dy };
-                }
+
+                draw();
+            } else if (isPanning) {
+                translateX += e.offsetX - startPan.x;
+                translateY += e.offsetY - startPan.y;
+                startPan = { x: e.offsetX, y: e.offsetY };
+                draw();
             }
-
-            draw();
         });
 
-        canvas.addEventListener("mouseup", e => {
+        canvas.addEventListener("pointerup", e => {
             if (dragging) saveState();
             dragging = null;
+            isPanning = false;
         });
+
+        //--------------
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoom = e.deltaY < 0 ? 1.1 : 0.9;
+            const mouseX = e.offsetX;
+            const mouseY = e.offsetY;
+
+            const imgX = (mouseX - translateX) / scale;
+            const imgY = (mouseY - translateY) / scale;
+
+            scale *= zoom;
+            translateX = mouseX - imgX * scale;
+            translateY = mouseY - imgY * scale;
+
+            draw();
+        });
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            resetTransform();
+            draw();
+        });
+        //--------------
 
         document.addEventListener("keydown", e => {
             if (e.key === "Control") isCtrlPressed = true;
@@ -207,6 +306,12 @@
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawImage();
+
+            ctx.save();
+            ctx.translate(translateX, translateY);
+            ctx.scale(scale, scale);
 
             function drawPath(pathObj) {
                 const path = pathObj.points;
@@ -258,6 +363,8 @@
             if (points.length > 0) {
                 drawPath({ points, closed: currentPathClosed });
             }
+
+            ctx.restore();
         }
 
         function drawPoint(p, color) {
