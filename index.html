@@ -4,7 +4,7 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>Bézier Pen Tool</title>
     <style>
         body {
@@ -18,6 +18,7 @@
             background: #fff;
             border: 1px solid #ccc;
             margin: 10px auto;
+            touch-action: none;
         }
 
         .controls {
@@ -202,6 +203,7 @@
         });
 
         canvas.addEventListener("pointermove", e => {
+            console.log(dragging, "pointermove")
             if (dragging) {
                 const pos = canvasToImageCoords(getMousePos(e));
                 const pt = dragging.point;
@@ -240,7 +242,7 @@
             isPanning = false;
         });
 
-        //--------------
+        // --------------
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             const zoom = e.deltaY < 0 ? 1.1 : 0.9;
