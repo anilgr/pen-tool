@@ -4,26 +4,39 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="height=device-height, width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>Bézier Pen Tool</title>
     <style>
         body {
             margin: 0;
             font-family: sans-serif;
             background: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        html, body {
+            width: 100vw; 
+            height: 100vh;
         }
 
         canvas {
             display: block;
             background: #fff;
-            border: 1px solid #ccc;
-            margin: 10px auto;
+            border: 4px solid salmon;
+            box-sizing: border-box;
             touch-action: none;
+            width: 100%;
+            height: 100%;
+            /* overflow: hidden; */
         }
 
         .controls {
-            text-align: center;
-            margin: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            padding: 10px;
         }
 
         button {
@@ -34,19 +47,23 @@
 
 <body>
 
-    <div class="controls">
+    <div class="controls" id="controls">
         <button onclick="undo()">Undo</button>
         <button onclick="redo()">Redo</button>
         <button onclick="clearPaths()">Clear</button>
         <button onclick="toggleClose()">Toggle Close</button>
         <button onclick="saveAsSVG()">Save as SVG</button>
-        <input type="file" id="imageLoader" accept="image/*" style="position:absolute; z-index: 1;">
+        <input type="file" id="imageLoader" accept="image/*">
     </div>
 
     <canvas id="canvas"></canvas>
 
     <script>
         const canvas = document.getElementById("canvas");
+
+        canvas.height = window.innerHeight - controls.offsetHeight;
+        canvas.width = window.innerWidth;
+
         const ctx = canvas.getContext("2d");
         // --------------
         let img = new Image();
@@ -84,7 +101,7 @@
             translateY = (canvas.height - img.height * scale) / 2;
         }
 
-        function canvasToImageCoords({x, y}) {
+        function canvasToImageCoords({ x, y }) {
             console.log(translateX, x, translateY, scale)
             return {
                 x: (x - translateX) / scale,
@@ -106,8 +123,8 @@
 
         //--------------
 
-        canvas.width = window.innerWidth - 100;
-        canvas.height = window.innerHeight - 100;
+        // canvas.width = window.innerWidth - 100;
+        // canvas.height = window.innerHeight - 100;
 
         let paths = []; // completed paths
         let points = []; // current open path
