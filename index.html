@@ -15,8 +15,9 @@
             flex-direction: column;
         }
 
-        html, body {
-            width: 100vw; 
+        html,
+        body {
+            width: 100vw;
             height: 100vh;
         }
 
@@ -61,8 +62,12 @@
     <script>
         const canvas = document.getElementById("canvas");
 
-        canvas.height = window.innerHeight - controls.offsetHeight;
-        canvas.width = window.innerWidth;
+        const h = window.innerHeight - controls.offsetHeight;
+        const w = window.innerWidth;
+        canvas.style.height = h + "px";
+        canvas.style.width = w + "px";
+        canvas.height = h
+        canvas.width = w;
 
         const ctx = canvas.getContext("2d");
         // --------------
@@ -110,7 +115,7 @@
         }
 
         function drawImage() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, img.width, img.height);
             if (!imageLoaded) return;
 
             ctx.save();
@@ -277,6 +282,12 @@
         });
 
         window.addEventListener('resize', () => {
+            const h = window.innerHeight - controls.offsetHeight;
+            const w = window.innerWidth;
+            canvas.style.height = h + "px";
+            canvas.style.width = w + "px";
+            canvas.height = h
+            canvas.width = w;
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             resetTransform();
@@ -304,7 +315,7 @@
                 for (const pt of path.points) {
                     for (const key of ["anchor", "cp1", "cp2"]) {
                         const p = pt[key];
-                        if (Math.hypot(p.x - pos.x, p.y - pos.y) < 8) {
+                        if (Math.hypot(p.x - pos.x, p.y - pos.y) < (20 / scale)) {
                             return { point: pt, key, path };
                         }
                     }
@@ -314,7 +325,7 @@
             for (const pt of points) {
                 for (const key of ["anchor", "cp1", "cp2"]) {
                     const p = pt[key];
-                    if (Math.hypot(p.x - pos.x, p.y - pos.y) < 8) {
+                    if (Math.hypot(p.x - pos.x, p.y - pos.y) < (20 / scale)) {
                         return { point: pt, key };
                     }
                 }
@@ -337,7 +348,7 @@
                 const closed = pathObj.closed;
 
                 ctx.beginPath();
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 2 / scale;
                 ctx.strokeStyle = "#000";
                 for (let i = 1; i < path.length; i++) {
                     const p0 = path[i - 1];
@@ -357,7 +368,7 @@
 
                 // Handle lines
                 ctx.strokeStyle = "#aaa";
-                ctx.setLineDash([5, 3]);
+                ctx.setLineDash([5  / scale, 3 / scale]);
                 for (const pt of path) {
                     ctx.beginPath();
                     ctx.moveTo(pt.anchor.x, pt.anchor.y);
@@ -388,7 +399,7 @@
 
         function drawPoint(p, color) {
             ctx.beginPath();
-            ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+            ctx.arc(p.x, p.y, 5 / scale, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
         }
