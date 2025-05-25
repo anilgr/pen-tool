@@ -182,83 +182,147 @@
             draw();
         }
 
+        const getDistance = (p1, p2) => {
+            const dx = p2.offsetX - p1.offsetX;
+            const dy = p2.offsetY - p1.offsetY;
+            return Math.hypot(dx, dy);
+        };
+
+        const getMidpoint = (p1, p2) => ({
+            x: (p1.offsetX + p2.offsetX) / 2,
+            y: (p1.offsetY + p2.offsetY) / 2,
+        });
+
+        const pointers = new Map();
+        let lastDist = null;
+        let lastMid = null;
+
         canvas.addEventListener("pointerdown", e => {
-            const pos = canvasToImageCoords(getMousePos(e));
-            console.log(pos)
-            const hit = findHandle(pos);
-            if (hit) {
-                dragging = hit;
-                selectedPathIndex = paths.indexOf(hit.path); // Select the path
-                if (hit.key === "anchor" && hit.point === points[0] && points.length > 1) {
-                    // Close and save path
+            console.log("pointerdown");
+            pointers.set(e.pointerId, e);
+
+            if (pointers.size === 1) {
+                const pos = canvasToImageCoords(getMousePos(e));
+                const hit = findHandle(pos);
+
+                if (hit) {
+                    dragging = hit;
+                    selectedPathIndex = paths.indexOf(hit.path); // Select the path
+                    if (hit.key === "anchor" && hit.point === points[0] && points.length > 1) {
+                        // Close and save path
+                        saveState();
+                        paths.push({ points: [...points], closed: true });
+                        points = [];
+                        currentPathClosed = false;
+                        dragging = null;
+                    }
+                } else {
                     saveState();
-                    paths.push({ points: [...points], closed: true });
-                    points = [];
-                    currentPathClosed = false;
-                    dragging = null;
-                }
-            } else {
-                console.log("mouse down")
-                saveState();
-                const newPoint = {
-                    anchor: pos,
-                    cp1: { x: pos.x - 50, y: pos.y },
-                    cp2: { x: pos.x + 50, y: pos.y }
-                };
-                if (points.length > 0 && isCtrlPressed) {
-                    const last = points[points.length - 1];
-                    const dx = last.anchor.x - last.cp2.x;
-                    const dy = last.anchor.y - last.cp2.y;
-                    newPoint.cp1 = { x: newPoint.anchor.x + dx, y: newPoint.anchor.y + dy };
+                    const newPoint = {
+                        anchor: pos,
+                        cp1: { x: pos.x - 50, y: pos.y },
+                        cp2: { x: pos.x + 50, y: pos.y }
+                    };
+                    if (points.length > 0 && isCtrlPressed) {
+                        const last = points[points.length - 1];
+                        const dx = last.anchor.x - last.cp2.x;
+                        const dy = last.anchor.y - last.cp2.y;
+                        newPoint.cp1 = { x: newPoint.anchor.x + dx, y: newPoint.anchor.y + dy };
+                    }
+
+                    points.push(newPoint);
+                    dragging = { key: "cp2", point: newPoint };
                 }
 
-                points.push(newPoint);
-                dragging = { key: "cp2", point: newPoint };
-                console.log(points)
+                if (!dragging) {
+                    isPanning = true;
+                    startPan = { x: e.offsetX, y: e.offsetY };
+                }
+                draw();
+            } else if (pointers.size === 2) {
+                dragging = null;
+                points.pop();
+                const [p1, p2] = Array.from(pointers.values());
+                lastDist = getDistance(p1, p2);
+                lastMid = getMidpoint(p1, p2);
             }
-
-            if (!dragging) {
-                isPanning = true;
-                startPan = { x: e.offsetX, y: e.offsetY };
-            }
-            draw();
         });
 
         canvas.addEventListener("pointermove", e => {
-            console.log(dragging, "pointermove")
-            if (dragging) {
-                const pos = canvasToImageCoords(getMousePos(e));
-                const pt = dragging.point;
-                const key = dragging.key;
+            console.log("pointermove", e.pointerId)
+            // if (!pointers.has(e.pointerId)) return;
+            pointers.set(e.pointerId, e);
+            if (pointers.size === 1) {
+                if (dragging) {
+                    const pos = canvasToImageCoords(getMousePos(e));
+                    const pt = dragging.point;
+                    const key = dragging.key;
 
-                if (key === "anchor") {
-                    const dx = pos.x - pt.anchor.x;
-                    const dy = pos.y - pt.anchor.y;
-                    pt.anchor = pos;
-                    if (!isCtrlPressed) {
-                        pt.cp1.x += dx; pt.cp1.y += dy;
-                        pt.cp2.x += dx; pt.cp2.y += dy;
+                    if (key === "anchor") {
+                        const dx = pos.x - pt.anchor.x;
+                        const dy = pos.y - pt.anchor.y;
+                        pt.anchor = pos;
+                        if (!isCtrlPressed) {
+                            pt.cp1.x += dx; pt.cp1.y += dy;
+                            pt.cp2.x += dx; pt.cp2.y += dy;
+                        }
+                    } else {
+                        pt[key] = pos;
+                        if (!isCtrlPressed && (key === "cp1" || key === "cp2")) {
+                            const dx = pt.anchor.x - pos.x;
+                            const dy = pt.anchor.y - pos.y;
+                            const mirror = key === "cp1" ? "cp2" : "cp1";
+                            pt[mirror] = { x: pt.anchor.x + dx, y: pt.anchor.y + dy };
+                        }
                     }
-                } else {
-                    pt[key] = pos;
-                    if (!isCtrlPressed && (key === "cp1" || key === "cp2")) {
-                        const dx = pt.anchor.x - pos.x;
-                        const dy = pt.anchor.y - pos.y;
-                        const mirror = key === "cp1" ? "cp2" : "cp1";
-                        pt[mirror] = { x: pt.anchor.x + dx, y: pt.anchor.y + dy };
-                    }
+
+                    draw();
+                } else if (isPanning) {
+                    translateX += e.offsetX - startPan.x;
+                    translateY += e.offsetY - startPan.y;
+                    startPan = { x: e.offsetX, y: e.offsetY };
+                    draw();
+                }
+            } else if (pointers.size === 2) {
+
+                dragging = null;
+                isPanning = false;
+
+                const [p1, p2] = Array.from(pointers.values());
+                const dist = getDistance(p1, p2);
+                const mid = getMidpoint(p1, p2);
+
+                if (lastDist && lastMid) {
+                    const scaleChange = dist / lastDist;
+
+                    const imgX = (mid.x - translateX) / scale;
+                    const imgY = (mid.y - translateY) / scale;
+
+                    scale *= scaleChange;
+
+                    translateX = mid.x - imgX * scale;
+                    translateY = mid.y - imgY * scale;
+                    // Adjust offset to keep the zoom centered around the midpoint
+                    translateX += mid.x - lastMid.x;
+                    translateY += mid.y - lastMid.y;
                 }
 
-                draw();
-            } else if (isPanning) {
-                translateX += e.offsetX - startPan.x;
-                translateY += e.offsetY - startPan.y;
-                startPan = { x: e.offsetX, y: e.offsetY };
+                lastDist = dist;
+                lastMid = mid;
                 draw();
             }
+
         });
 
         canvas.addEventListener("pointerup", e => {
+            console.log("pointerup");
+
+            pointers.delete(e.pointerId);
+            if (pointers.size < 2) {
+                lastDist = null;
+                lastMid = null;
+            }
+
             if (dragging) saveState();
             dragging = null;
             isPanning = false;
@@ -368,7 +432,7 @@
 
                 // Handle lines
                 ctx.strokeStyle = "#aaa";
-                ctx.setLineDash([5  / scale, 3 / scale]);
+                ctx.setLineDash([5 / scale, 3 / scale]);
                 for (const pt of path) {
                     ctx.beginPath();
                     ctx.moveTo(pt.anchor.x, pt.anchor.y);
