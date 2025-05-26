@@ -177,7 +177,6 @@
         }
 
         function toggleClose() {
-            console.log("sdfdf")
             currentPathClosed = !currentPathClosed;
             draw();
         }
@@ -208,14 +207,14 @@
                 if (hit) {
                     dragging = hit;
                     selectedPathIndex = paths.indexOf(hit.path); // Select the path
-                    if (hit.key === "anchor" && hit.point === points[0] && points.length > 1) {
-                        // Close and save path
-                        saveState();
-                        paths.push({ points: [...points], closed: true });
-                        points = [];
-                        currentPathClosed = false;
-                        dragging = null;
-                    }
+                    // if (hit.key === "anchor" && hit.point === points[0] && points.length > 1) {
+                    //     // Close and save path
+                    //     saveState();
+                    //     paths.push({ points: [...points], closed: true });
+                    //     points = [];
+                    //     currentPathClosed = false;
+                    //     dragging = null;
+                    // }
                 } else {
                     saveState();
                     const newPoint = {
