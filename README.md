@@ -1,2 +1,2 @@
 # pen-tool
-A pen-tool to polish your tracing skills.
+An experimental dive into designing a graphic pen tool with emphasis on touch device user experience.
